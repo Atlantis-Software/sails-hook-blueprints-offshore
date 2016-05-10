@@ -6,7 +6,6 @@ var _ = require('lodash');
 var util = require('util');
 var pluralize = require('pluralize');
 var STRINGFILE = require('sails-stringfile');
-var offshore = require('offshore');
 var BlueprintController = {
   create: require('./actions/create'),
   find: require('./actions/find'),
@@ -28,15 +27,12 @@ var BlueprintController = {
  */
 
 module.exports = function(sails) {
-console.log(sails.hooks['orm-offshore']);
   /**
    * Private dependencies.
    * (need access to `sails`)
    */
 
   var onRoute = require('./onRoute')(sails);
-
-
 
   var hook;
 
@@ -128,14 +124,12 @@ console.log(sails.hooks['orm-offshore']);
         eventsToWaitFor.push('hook:policies:bound');
       }
       if (sails.hooks['orm-offshore']) {
-		  console.log('orm-offshore');
         eventsToWaitFor.push('hook:orm-offshore:loaded');
       }
 
       if (sails.hooks.controllers) {
         eventsToWaitFor.push('hook:controllers:loaded');
       }
-	  console.log(eventsToWaitFor);
       sails.after(eventsToWaitFor, hook.bindShadowRoutes);
 
       // Load blueprint middleware and continue.
