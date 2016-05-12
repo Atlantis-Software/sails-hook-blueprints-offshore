@@ -1,0 +1,7 @@
+node_modules
+*.swp
+*.swo
+.dist
+nbproject/
+coverage/
+npm-debug.log
