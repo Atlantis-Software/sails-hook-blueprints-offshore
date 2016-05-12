@@ -1,9 +1,26 @@
-# Blueprints for Offshore Hook
+# sails-hook-blueprints-offshore
+Sails blueprints using offshore ORM
 
-## Purpose
+#Install
 
-This hook's responsibilities are:
+Install [sails-hook-orm-offshore](https://github.com/Atlantis-Software/sails-hook-orm-offshore) first:
+```sh
+$ npm install sails-hook-orm-offshore --save
+```
 
-1. Use `sails.modules` to read blueprints from the user's app into `self.middleware`.
-2. Bind shadow routes to blueprint actions and controller actions.
-3. Listen for `route:typeUnknown` on `sails`, interpret route syntax which should match a blueprint action, and bind the appropriate middleware (this happens when the Router is loaded, after all the hooks.)
+Install this hook with:
+
+```sh
+$ npm install sails-hook-blueprints-offshore --save
+```
+
+# Configuration
+
+`.sailsrc`
+````
+"hooks": {
+  "blueprints": false,
+  "orm": false,
+  "pubsub": false
+}
+```
