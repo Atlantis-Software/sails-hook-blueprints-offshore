@@ -1,6 +1,6 @@
 {
   "name": "sails-hook-blueprints-offshore",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Blueprints for offshore",
   "main": "index.js",
   "sails": {
