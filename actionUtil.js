@@ -53,10 +53,15 @@ var actionUtil = {
     var associations = [];
 
     _.each(_options.associations, function(association) {
-      // If an alias filter was provided, override the blueprint config.
-      if (aliasFilter) {
-        shouldPopulate = _.contains(aliasFilter, association.alias);
-      }
+      _.forEach(aliasFilter, function(val) {
+        shouldPopulate = val.match(new RegExp(association.alias)) ? true : false;
+        // If we know that we should populate, we must break the loop
+        if (shouldPopulate) {
+          // If we can validate the population, set the right (deep) alias
+          association.alias = val;
+          return false;
+        }
+      });
 
       // Only populate associations if a population filter has been supplied
       // with the request or if `populate` is set within the blueprint config.
