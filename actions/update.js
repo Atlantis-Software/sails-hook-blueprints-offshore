@@ -78,7 +78,7 @@ module.exports = function updateOneRecord (req, res) {
 
       // If we have the pubsub hook, use the Model's publish method
       // to notify all subscribers about the update.
-      if (req._sails.hooks.pubsub) {
+      if (req._sails.hooks['pubsub-offshore']) {
         if (req.isSocket) { Model.subscribe(req, records); }
         Model.publishUpdate(pk, _.cloneDeep(values), !req.options.mirror && req, {
           previous: _.cloneDeep(matchingRecord.toJSON())
