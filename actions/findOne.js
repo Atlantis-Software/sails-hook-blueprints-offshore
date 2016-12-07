@@ -29,7 +29,7 @@ module.exports = function findOneRecord (req, res) {
     if (err) return res.serverError(err);
     if(!matchingRecord) return res.notFound('No record found with the specified `id`.');
 
-    if (req._sails.hooks.pubsub && req.isSocket) {
+    if (req._sails.hooks['pubsub-offshore'] && req.isSocket) {
       Model.subscribe(req, matchingRecord);
       actionUtil.subscribeDeep(req, matchingRecord);
     }
