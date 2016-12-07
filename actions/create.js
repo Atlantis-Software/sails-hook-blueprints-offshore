@@ -36,7 +36,7 @@ module.exports = function createRecord (req, res) {
 
 		// If we have the pubsub hook, use the model class's publish method
 		// to notify all subscribers about the created item
-		if (req._sails.hooks.pubsub) {
+		if (req._sails.hooks['pubsub-offshore']) {
 			if (req.isSocket) {
 				Model.subscribe(req, newInstance);
 				Model.introduce(newInstance);
