@@ -32,7 +32,7 @@ module.exports = function destroyOneRecord (req, res) {
     Model.destroy(pk).exec(function destroyedRecord (err) {
       if (err) return res.negotiate(err);
 
-      if (req._sails.hooks.pubsub) {
+      if (req._sails.hooks['pubsub-offshore']) {
         Model.publishDestroy(pk, !req._sails.config.blueprints.mirror && req, {previous: record});
         if (req.isSocket) {
           Model.unsubscribe(req, record);
