@@ -111,7 +111,7 @@ module.exports = function addToCollection (req, res) {
       function createChild() {
         ChildModel.create(child).exec(function createdNewChild (err, newChildRecord){
           if (err) return cb(err);
-          if (req._sails.hooks.pubsub) {
+          if (req._sails.hooks['pubsub-offshore']) {
             if (req.isSocket) {
               ChildModel.subscribe(req, newChildRecord);
               ChildModel.introduce(newChildRecord);
@@ -165,7 +165,7 @@ module.exports = function addToCollection (req, res) {
 
       // Only broadcast an update if this isn't a duplicate `add`
       // (otherwise connected clients will see duplicates)
-      if (!isDuplicateInsertError && req._sails.hooks.pubsub) {
+      if (!isDuplicateInsertError && req._sails.hooks['pubsub-offshore']) {
 
         // Subscribe to the model you're adding to, if this was a socket request
         if (req.isSocket) { Model.subscribe(req, async_data.parent); }
