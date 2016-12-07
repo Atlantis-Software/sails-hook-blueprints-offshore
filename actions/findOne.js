@@ -1,24 +1,22 @@
+
 /**
  * Module dependencies
  */
+
 var actionUtil = require('../actionUtil');
 
 /**
  * Find One Record
  *
- * get /:modelIdentity/:id
+ * http://sailsjs.com/docs/reference/blueprint-api/find-one.
  *
- * An API call to find and return a single model instance from the data adapter
- * using the specified id.
+ * > Blueprint action to find and return the record with the specified id.
  *
- * Required:
- * @param {Integer|String} id  - the unique id of the particular instance you'd like to look up *
- *
- * Optional:
- * @param {String} callback - default jsonp callback param (i.e. the name of the js function returned)
  */
 
 module.exports = function findOneRecord (req, res) {
+
+  var sails = req._sails;
 
   var Model = actionUtil.parseModel(req);
   var pk = actionUtil.requirePk(req);
@@ -26,15 +24,20 @@ module.exports = function findOneRecord (req, res) {
   var query = Model.findOne(pk);
   query = actionUtil.populateRequest(query, req);
   query.exec(function found(err, matchingRecord) {
-    if (err) return res.serverError(err);
-    if(!matchingRecord) return res.notFound('No record found with the specified `id`.');
+    if (err) { return res.serverError(err); }
 
-    if (req._sails.hooks['pubsub-offshore'] && req.isSocket) {
-      Model.subscribe(req, matchingRecord);
+    if(!matchingRecord) {
+      sails.log.verbose('No record found with the specified id (`'+pk+'`).');
+      return res.notFound();
+    }
+
+    if (sails.hooks['pubsub-offshore'] && req.isSocket) {
+      Model.subscribe(req, [matchingRecord[Model.primaryKey]]);
       actionUtil.subscribeDeep(req, matchingRecord);
     }
 
-    res.ok(matchingRecord);
+    return res.ok(matchingRecord);
+
   });
 
 };
