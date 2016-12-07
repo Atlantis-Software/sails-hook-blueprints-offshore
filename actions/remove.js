@@ -56,7 +56,7 @@ module.exports = function remove(req, res) {
 
         // If we have the pubsub hook, use the model class's publish method
         // to notify all subscribers about the removed item
-        if (req._sails.hooks.pubsub) {
+        if (req._sails.hooks['pubsub-offshore']) {
           Model.publishRemove(parentRecord[Model.primaryKey], relation, childPk, !req._sails.config.blueprints.mirror && req);
         }
 
