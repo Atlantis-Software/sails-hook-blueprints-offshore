@@ -38,7 +38,7 @@ describe('blueprints :: ', function() {
       appHelper.linkDeps(tmpDir.name);
       (new Sails()).load(_.merge({
         hooks: {
-          grunt: false, views: false, policies: false, pubsub: false, i18n: false
+          grunt: false, views: false, policies: false, pubsub: false, i18n: false, blueprints: false
         },
         orm: { moduleDefinitions: { adapters: { 'memory': require('offshore-memory')} } },
         models: {
@@ -492,9 +492,9 @@ describe('blueprints :: ', function() {
 
       it('should still respond to RESTful blueprint requests correctly :: ', function(done) {
         sailsApp.models.user.create([{name: 'scott'}, {name: 'mike'}]).exec(function(err) {
-          if (err) {return done(err);}
-          // fix a bug in sails see https://github.com/balderdashy/sails/pull/3918
-          delete sailsApp.hooks.blueprints;
+          if (err) {
+            return done(err);
+          }
           sailsApp.reloadActions(function(err) {
             if (err) {return done(err);}
             sailsApp.request('get /user/find', function (err, resp, data) {
