@@ -36,7 +36,7 @@
     "socket.io-client": "1.4.5",
     "sails-hook-sockets": "^0.13.8",
     "sails-hook-orm-offshore": "^0.0.5",
-    "sails-hook-pubsub-offshore": "^0.0.1",
+    "sails-hook-pubsub-offshore": "Atlantis-Software/sails-hook-pubsub-offshore",
     "offshore-memory": "^0.0.6"
   }
 }
