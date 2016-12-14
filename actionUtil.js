@@ -3,7 +3,7 @@
  */
 
 var util = require('util');
-var _ = require('@sailshq/lodash');
+var _ = require('lodash');
 var mergeDefaults = require('merge-defaults');
 
 /**
