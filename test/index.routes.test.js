@@ -5,7 +5,7 @@
 var util = require('util');
 var assert = require('assert');
 var tmp = require('tmp');
-var _ = require('lodash');
+var _ = require('@sailshq/lodash');
 
 var appHelper = require('./helpers/appHelper');
 
@@ -41,16 +41,20 @@ describe('blueprints :: ', function() {
       },
       orm: {
         moduleDefinitions: {
-          adapters: { 'memory': require('offshore-memory')},
           models: { 'user': {} }
         }
       },
       models: {
         migrate: 'drop',
-        schema: true
+        attributes: {
+          createdAt: { type: 'number', autoCreatedAt: true, },
+          updatedAt: { type: 'number', autoUpdatedAt: true, },
+          id: { type: 'integer', autoIncrement: true, primaryKey: true }
+        }
       },
       blueprints: {
         shortcuts: false,
+        actions: true,
         rest: true,
         index: true
       },

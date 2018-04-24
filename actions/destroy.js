@@ -2,7 +2,8 @@
  * Module dependencies
  */
 
-var actionUtil = require('../actionUtil');
+var _ = require('@sailshq/lodash');
+var formatUsageError = require('../formatUsageError');
 
 /**
  * Destroy One Record
@@ -15,21 +16,58 @@ var actionUtil = require('../actionUtil');
  */
 
 module.exports = function destroyOneRecord (req, res) {
+  var parseBlueprintOptions = req.options.parseBlueprintOptions || req._sails.config.blueprints.parseBlueprintOptions;
 
-  var Model = actionUtil.parseModel(req);
-  var pk = actionUtil.requirePk(req);
+  // Set the blueprint action for parseBlueprintOptions.
+  req.options.blueprintAction = 'destroy';
 
-  var query = Model.findOne(pk);
-  query = actionUtil.populateRequest(query, req);
+  var queryOptions = parseBlueprintOptions(req);
+  var Model = req._sails.models[queryOptions.using];
+
+  var criteria = {};
+  criteria[Model.primaryKey] = queryOptions.criteria.where[Model.primaryKey];
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // FUTURE: Use a database transaction here, if supported by the datastore.
+  // e.g.
+  // ```
+  // Model.getDatastore().transaction(function during(db, proceed){ ... })
+  // .exec(function afterwards(err, result){}));
+  // ```
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+  var query = Model.findOne(_.cloneDeep(criteria));
+  Object.keys(queryOptions.populates).forEach(function(child) {
+    query.populate(child, queryOptions.populates[child]);
+  });
   query.exec(function foundRecord (err, record) {
-    if (err) { return res.serverError(err); }
-    if(!record) { return res.notFound('No record found with the specified `id`.'); }
+    if (err) {
+      // If this is a usage error coming back from Waterline,
+      // (e.g. a bad criteria), then respond w/ a 400 status code.
+      // Otherwise, it's something unexpected, so use 500.
+      switch (err.name) {
+        case 'UsageError': return res.badRequest(formatUsageError(err, req));
+        default: return res.serverError(err);
+      }
+    }//-•
 
-    Model.destroy(pk).exec(function destroyedRecord (err) {
-      if (err) { return res.negotiate(err); }
+    if (!record) { return res.notFound('No record found with the specified `id`.'); }
 
-      if (req._sails.hooks['pubsub-offshore']) {
-        Model._publishDestroy(pk, !req._sails.config.blueprints.mirror && req, {previous: record});
+    // (Note: this could be achieved in a single query, but a separate `findOne`
+    // is used first to provide a better experience for front-end developers
+    // integrating with the blueprint API out of the box.  If we didn't need
+    // or care about that, we could just use `.meta({fetch: true})` when calling
+    // `.destroy()`.
+    Model.destroy(_.cloneDeep(criteria)).exec(function destroyedRecord (err) {
+      if (err) {
+        switch (err.name) {
+          case 'UsageError': return res.badRequest(formatUsageError(err, req));
+          default: return res.serverError(err);
+        }
+      }//-•
+
+      if (req._sails.hooks.pubsub) {
+        Model._publishDestroy(criteria[Model.primaryKey], !req._sails.config.blueprints.mirror && req, {previous: record});
         if (req.isSocket) {
           Model.unsubscribe(req, [record[Model.primaryKey]]);
           Model._retire(record);

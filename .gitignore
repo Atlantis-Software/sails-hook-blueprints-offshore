@@ -5,3 +5,5 @@ node_modules
 nbproject/
 coverage/
 npm-debug.log
+.nyc_output/
+package-lock.json

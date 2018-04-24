@@ -2,8 +2,9 @@
  * Module dependencies
  */
 
+var _ = require('@sailshq/lodash');
 var actionUtil = require('../actionUtil');
-var _ = require('lodash');
+var formatUsageError = require('../formatUsageError');
 
 /**
  * Find Records
@@ -17,41 +18,31 @@ var _ = require('lodash');
  */
 
 module.exports = function findRecords (req, res) {
+  var parseBlueprintOptions = req.options.parseBlueprintOptions || req._sails.config.blueprints.parseBlueprintOptions;
 
-  // Look up the model
-  var Model = actionUtil.parseModel(req);
+  // Set the blueprint action for parseBlueprintOptions.
+  req.options.blueprintAction = 'find';
 
+  var queryOptions = parseBlueprintOptions(req);
 
-  // If an `id` param was specified, use the findOne blueprint action
-  // to grab the particular instance with its primary key === the value
-  // of the `id` param.   (mainly here for compatibility for 0.9, where
-  // there was no separate `findOne` action)
-  if ( actionUtil.parsePk(req) ) {
+  var Model = req._sails.models[queryOptions.using];
 
-    // TODO: For clarity's sake, this should be handled this elsewhere.
-    return require('./findOne')(req,res);
-  }//-•
-
-
-  // Lookup for records that match the specified criteria.
-  var query = Model.find()
-  .where( actionUtil.parseCriteria(req) )
-  .limit( actionUtil.parseLimit(req) )
-  .skip( actionUtil.parseSkip(req) )
-  .sort( actionUtil.parseSort(req) );
-  query = actionUtil.populateRequest(query, req);
+  var query = Model.find(queryOptions.criteria);
+  Object.keys(queryOptions.populates).forEach(function(child) {
+    query.populate(child, queryOptions.populates[child]);
+  });
   query.exec(function found(err, matchingRecords) {
     if (err) {
       // If this is a usage error coming back from Waterline,
       // (e.g. a bad criteria), then respond w/ a 400 status code.
       // Otherwise, it's something unexpected, so use 500.
       switch (err.name) {
-        case 'UsageError': return res.badRequest(err);
+        case 'UsageError': return res.badRequest(formatUsageError(err, req));
         default: return res.serverError(err);
       }
     }//-•
 
-    if (req._sails.hooks['pubsub-offshore'] && req.isSocket) {
+    if (req._sails.hooks.pubsub && req.isSocket) {
       Model.subscribe(req, _.pluck(matchingRecords, Model.primaryKey));
       // Only `._watch()` for new instances of the model if
       // `autoWatch` is enabled.

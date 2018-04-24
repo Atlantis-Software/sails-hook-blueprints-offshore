@@ -17,3 +17,5 @@ CONTRIBUTING.md
 .jshintrc
 .editorconfig
 example
+.nyc_output/
+package-lock.json

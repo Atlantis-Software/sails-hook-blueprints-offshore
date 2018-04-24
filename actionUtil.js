@@ -3,7 +3,8 @@
  */
 
 var util = require('util');
-var _ = require('lodash');
+var _ = require('@sailshq/lodash');
+var flaverr = require('flaverr');
 var mergeDefaults = require('merge-defaults');
 
 /**
@@ -27,7 +28,7 @@ var actionUtil = {
     var DEFAULT_POPULATE_LIMIT = req._sails.config.blueprints.defaultLimit || 30;
     var _options = req.options;
     var aliasFilter = req.param('populate');
-    var shouldPopulate = _._.isUndefined(_options.populate) ? (req._sails.config.blueprints.populate) : _options.populate;
+    var shouldPopulate = _.isUndefined(_options.populate) ? (req._sails.config.blueprints.populate) : _options.populate;
 
     // Convert the string representation of the filter list to an Array. We
     // need this to provide flexibility in the request param. This way both
@@ -42,15 +43,10 @@ var actionUtil = {
     var associations = [];
 
     _.each(_options.associations, function(association) {
-      _.forEach(aliasFilter, function(val) {
-        shouldPopulate = val.match(new RegExp(association.alias)) ? true : false;
-        // If we know that we should populate, we must break the loop
-        if (shouldPopulate) {
-          // If we can validate the population, set the right (deep) alias
-          association.alias = val;
-          return false;
-        }
-      });
+      // If an alias filter was provided, override the blueprint config.
+      if (aliasFilter) {
+        shouldPopulate = _.contains(aliasFilter, association.alias);
+      }
 
       // Only populate associations if a population filter has been supplied
       // with the request or if `populate` is set within the blueprint config.
@@ -104,9 +100,11 @@ var actionUtil = {
     var DEFAULT_POPULATE_LIMIT = (sails && sails.config.blueprints.defaultLimit) || 30;
 
     return _.reduce(associations, function(query, association) {
-      return query.populate(association.alias, {
-        limit: association.limit || DEFAULT_POPULATE_LIMIT
-      });
+      var options = {};
+      if (association.type === 'collection') {
+        options.limit = association.limit || DEFAULT_POPULATE_LIMIT;
+      }
+      return query.populate(association.alias, options);
     }, query);
   },
 
@@ -135,7 +133,7 @@ var actionUtil = {
         });
       }
       // If there is an associated to-one model instance, subscribe to it
-      else if (assoc.type === 'model' && record[assoc.alias]) {
+      else if (assoc.type === 'model' && _.isObject(record[assoc.alias])) {
         AssociatedModel.subscribe(req, [record[assoc.alias][AssociatedModel.primaryKey]]);
       }
     });
@@ -153,10 +151,9 @@ var actionUtil = {
 
     var pk = req.options.id || (req.options.where && req.options.where.id) || req.param('id');
 
-    // TODO: make this smarter...
+    // FUTURE: make this smarter...
     // (e.g. look for actual primary key of model and look for it
     //  in the absence of `id`.)
-    // See coercePK for reference (although be aware it is not currently in use)
 
     // exclude criteria on id field
     pk = _.isPlainObject(pk) ? undefined : pk;
@@ -202,13 +199,15 @@ var actionUtil = {
    * @returns {Dictionary}
    *          The normalized WHERE clause
    *
-   * @throws {Error} If WHERE clause cannot be parsed.
-   *         @property {String} `code: 'E_WHERE_CLAUSE_UNPARSEABLE'`
+   * @throws {Error} If WHERE clause cannot be parsed...
+   *                 ...whether that's for syntactic reasons (JSON.parse),
+   *                 or for semantic reasons (Waterline's `forgeStageTwoQuery()`).
+   *         @property {String} `name: 'UsageError'`
    */
   parseCriteria: function ( req ) {
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    // TODO: this should be renamed to `.parseWhere()`
+    // FUTURE: this should be renamed to `.parseWhere()`
     // ("criteria" means the entire dictionary, including
     // `where` -- but also `skip`, `limit`, etc.)
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -226,10 +225,15 @@ var actionUtil = {
     // Look for explicitly specified `where` parameter.
     var where = req.allParams().where;
 
-    // If `where` parameter is a string, try to interpret it as JSON
+    // If `where` parameter is a string, try to interpret it as JSON.
+    // (If it cannot be parsed, throw a UsageError.)
     if (_.isString(where)) {
-      where = tryToParseJSON(where);
-    }
+      try {
+        where = JSON.parse(where);
+      } catch (e) {
+        throw flaverr({ name: 'UsageError' }, new Error('Could not JSON.parse() the provided `where` clause. Here is the raw error: '+e.stack));
+      }
+    }//>-•
 
     // If `where` has not been specified, but other unbound parameter variables
     // **ARE** specified, build the `where` option using them.
@@ -242,14 +246,14 @@ var actionUtil = {
       // Omit built-in runtime config (like query modifiers)
       where = _.omit(where, blacklist || ['limit', 'skip', 'sort']);
 
-      // Omit any params w/ undefined values
+      // Omit any params that have `undefined` on the RHS.
       where = _.omit(where, function(p) {
-        if (_.isUndefined(p)) {return true;}
+        if (_.isUndefined(p)) { return true; }
       });
 
-    }
+    }//>-
 
-    // Merge w/ req.options.where.
+    // Deep merge w/ req.options.where.
     where = _.merge({}, req.options.where || {}, where) || undefined;
 
     // Return final `where`.
@@ -346,7 +350,9 @@ var actionUtil = {
       }
       // If it is not valid JSON, then fall back to interpreting it as-is.
       // (e.g. "name ASC")
-      catch(e) {}
+      catch (e) {
+        return sort;
+      }
     }
     return sort;
   },
@@ -373,25 +379,5 @@ var actionUtil = {
   }
 };
 
-
-
-
-
-
-// TODO:
-//
-// Replace the following helper with the version in sails.util:
-
-// Attempt to parse JSON
-// If the parse fails, return the error object
-// If JSON is falsey, return null
-// (this is so that it will be ignored if not specified)
-function tryToParseJSON (json) {
-  if (!_.isString(json)) { return null; }
-  try {
-    return JSON.parse(json);
-  }
-  catch (e) { return e; }
-}
 
 module.exports = actionUtil;

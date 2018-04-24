@@ -6,7 +6,7 @@ var path = require('path');
 var child_process = require('child_process');
 var exec = child_process.exec;
 var fs = require('fs-extra');
-var _ = require('lodash');
+var _ = require('@sailshq/lodash');
 var SocketIOClient = require('socket.io-client');
 delete require.cache[require.resolve('socket.io-client')];
 var SailsIOClient = require('sails.io.js');
@@ -76,7 +76,7 @@ module.exports = {
     // Create an empty directory for the test app.
     fs.mkdirSync(appDirPath);
     process.chdir(appName);
-    child_process.exec('node ' + pathToLocalSailsCLI + ' new --fast --without=lodash,async', function(err) {
+    child_process.exec('node ' + pathToLocalSailsCLI + ' new --fast --traditional --without=lodash,async', function(err) {
       if (err) {
         return done(err);
       }
@@ -237,26 +237,31 @@ module.exports = {
   },
 
   linkDeps: function(appPath) {
+
+    // Get the given app's package.json (defaulting to an empty dictionary).
+    var packageJson;
+    try {
+      packageJson = require(path.resolve(appPath, 'package.json'));
+    } catch (e) {
+      packageJson = {};
+    }
+
     var deps = ['sails-hook-orm-offshore', 'sails-hook-sockets', 'offshore-memory', 'sails-hook-pubsub-offshore'];
+
     _.each(deps, function(dep) {
+      // Create a symlink
       fs.ensureSymlinkSync(path.resolve(__dirname, '..', '..', 'node_modules', dep), path.resolve(appPath, 'node_modules', dep));
+      // Add a entry into the package.json dependencies
+      packageJson.dependencies = packageJson.dependencies || {};
+      packageJson.dependencies[dep] = '0.0.0';
     });
+
     // add this hook
     fs.ensureSymlinkSync(path.resolve(__dirname, '..', '..'), path.resolve(appPath, 'node_modules', 'sails-hook-blueprints-offshore'));
-  },
+    packageJson.dependencies['sails-hook-blueprints-offshore'] = '0.0.0';
 
-  linkLodash: function(appPath) {
-    fs.ensureSymlinkSync(path.resolve(__dirname, '..', '..', 'node_modules', 'lodash'), path.resolve(appPath, 'node_modules', 'lodash'));
-  },
-
-
-  linkAsync: function(appPath) {
-    fs.ensureSymlinkSync(path.resolve(__dirname, '..', '..', 'node_modules', 'async'), path.resolve(appPath, 'node_modules', 'async'));
-  },
-
-
-  linkSails: function(appPath) {
-    fs.ensureSymlinkSync(path.resolve(__dirname, '..', '..'), path.resolve(appPath, 'node_modules', 'sails'));
+    // Output the update package.json
+    fs.writeFileSync(path.resolve(appPath, 'package.json'), JSON.stringify(packageJson));
   },
 
 };

@@ -2,9 +2,9 @@
  * Module dependencies
  */
 
-var actionUtil = require('../actionUtil');
 var util = require('util');
-var _ = require('lodash');
+var _ = require('@sailshq/lodash');
+var formatUsageError = require('../formatUsageError');
 
 
 /**
@@ -19,56 +19,76 @@ var _ = require('lodash');
 
 module.exports = function updateOneRecord (req, res) {
 
-  // Look up the model
-  var Model = actionUtil.parseModel(req);
+  var parseBlueprintOptions = req.options.parseBlueprintOptions || req._sails.config.blueprints.parseBlueprintOptions;
 
-  // Locate and validate the required `id` parameter.
-  var pk = actionUtil.requirePk(req);
+  // Set the blueprint action for parseBlueprintOptions.
+  req.options.blueprintAction = 'update';
 
-  // Default the value blacklist to just "id", so that models that have an
-  // "id" field that is _not_ the primary key don't have the id field
-  // updated mistakenly.  See https://github.com/balderdashy/sails/issues/3625
-  req.options.values = req.options.values || {};
-  req.options.values.blacklist = req.options.values.blacklist || ['id'];
+  var queryOptions = parseBlueprintOptions(req);
+  var Model = req._sails.models[queryOptions.using];
 
-  // Create `values` object (monolithic combination of all parameters),
-  // omitting any blacklisted params.
-  var values = actionUtil.parseValues(req);
+  var criteria = {};
+  criteria[Model.primaryKey] = queryOptions.criteria.where[Model.primaryKey];
 
-  // No matter what, don't allow changing the PK via the update blueprint
-  // (you should just drop and re-add the record if that's what you really want)
-  if (typeof values[Model.primaryKey] !== 'undefined' && values[Model.primaryKey] !== pk) {
-    req._sails.log.warn('Cannot change primary key via update blueprint; ignoring value sent for `' + Model.primaryKey + '`');
-  }
-  // Make sure the primary key is unchanged
-  values[Model.primaryKey] = pk;
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // FUTURE: Use a database transaction here, if supported by the datastore.
+  // e.g.
+  // ```
+  // Model.getDatastore().transaction(function during(db, proceed){ ... })
+  // .exec(function afterwards(err, result){}));
+  // ```
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
   // Find and update the targeted record.
   //
   // (Note: this could be achieved in a single query, but a separate `findOne`
   //  is used first to provide a better experience for front-end developers
   //  integrating with the blueprint API.)
-  var query = Model.findOne(pk);
-  // Populate the record according to the current "populate" settings
-  query = actionUtil.populateRequest(query, req);
-
+  var query = Model.findOne(_.cloneDeep(criteria));
+  Object.keys(queryOptions.populates).forEach(function(child) {
+    query.populate(child, queryOptions.populates[child]);
+  });
   query.exec(function found(err, matchingRecord) {
+    if (err) {
+      switch (err.name) {
+        case 'UsageError': return res.badRequest(formatUsageError(err, req));
+        default: return res.serverError(err);
+      }
+    }//-•
 
-    if (err) { return res.serverError(err); }
     if (!matchingRecord) { return res.notFound(); }
 
-    Model.update(pk, values).exec(function updated(err, records) {
+    Model.update(_.cloneDeep(criteria), queryOptions.valuesToSet).exec(function updated(err, records) {
 
       // Differentiate between waterline-originated validation errors
       // and serious underlying issues. Respond with badRequest if a
-      // validation error is encountered, w/ validation info.
-      if (err) { return res.negotiate(err); }
+      // validation error is encountered, w/ validation info, or if a
+      // uniqueness constraint is violated.
+      if (err) {
+        switch (err.name) {
+          case 'AdapterError':
+            switch (err.code) {
+              case 'E_UNIQUE': return res.badRequest(err);
+              default: return res.serverError(err);
+            }
+          case 'UsageError': return res.badRequest(formatUsageError(err, req));
+          default: return res.serverError(err);
+        }
+      }//-•
 
+      // If we didn't fetch the updated instance, just return 'OK'.
+      if (!records) {
+        return res.ok();
+      }
+
+      if (!_.isArray(records)) {
+        return res.serverError('Consistency violation: When `fetch: true` is used, the second argument of the callback from update should always be an array-- but for some reason, it was not!  This should never happen... it could be due to a bug or partially implemented feature in the database adapter, or some other unexpected circumstance.');
+      }
 
       // Because this should only update a single record and update
       // returns an array, just use the first item.  If more than one
       // record was returned, something is amiss.
-      if (!records || !records.length || records.length > 1) {
+      if (!records.length || records.length > 1) {
         req._sails.log.warn(
         util.format('Unexpected output from `%s.update`.', Model.globalId)
         );
@@ -76,12 +96,16 @@ module.exports = function updateOneRecord (req, res) {
 
       var updatedRecord = records[0];
 
+      var pk = updatedRecord[Model.primaryKey];
+
       // If we have the pubsub hook, use the Model's publish method
       // to notify all subscribers about the update.
-      if (req._sails.hooks['pubsub-offshore']) {
+      if (req._sails.hooks.pubsub) {
         if (req.isSocket) { Model.subscribe(req, _.pluck(records, Model.primaryKey)); }
-        Model._publishUpdate(pk, _.cloneDeep(values), !req.options.mirror && req, {
-          previous: _.cloneDeep(matchingRecord.toJSON())
+        // The _.cloneDeep calls ensure that only plain dictionaries are broadcast.
+        // TODO -- why is that important?
+        Model._publishUpdate(pk, _.cloneDeep(queryOptions.valuesToSet), !req.options.mirror && req, {
+          previous: _.cloneDeep(matchingRecord)
         });
       }
 
@@ -90,8 +114,10 @@ module.exports = function updateOneRecord (req, res) {
       // (Note: again, this extra query could be eliminated, but it is
       //  included by default to provide a better interface for integrating
       //  front-end developers.)
-      var Q = Model.findOne(updatedRecord[Model.primaryKey]);
-      Q = actionUtil.populateRequest(Q, req);
+      var Q = Model.findOne(_.cloneDeep(criteria));
+      Object.keys(queryOptions.populates).forEach(function(child) {
+        Q.populate(child, queryOptions.populates[child]);
+      });
       Q.exec(function foundAgain(err, populatedRecord) {
         if (err) { return res.serverError(err); }
         if (!populatedRecord) { return res.serverError('Could not find record after updating!'); }

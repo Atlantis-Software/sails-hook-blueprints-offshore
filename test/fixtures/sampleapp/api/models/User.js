@@ -1,10 +1,9 @@
 module.exports = {
-  autoPK: false,
-  schema: true,
+  primaryKey: 'user_id',
   attributes: {
+    id: false,
     user_id: {
       type: 'integer',
-      primaryKey: true,
       autoIncrement: true
     },
     name: 'string',
@@ -17,8 +16,7 @@ module.exports = {
       via: 'vets'
     },
     profile: {
-      model: 'userprofile',
-      via: 'user'
+      model: 'userprofile'
     }
   }
 

@@ -1,9 +1,10 @@
-
 /**
  * Module dependencies
  */
 
+var _ = require('@sailshq/lodash');
 var actionUtil = require('../actionUtil');
+var formatUsageError = require('../formatUsageError');
 
 /**
  * Find One Record
@@ -16,22 +17,43 @@ var actionUtil = require('../actionUtil');
 
 module.exports = function findOneRecord (req, res) {
 
-  var sails = req._sails;
+  var parseBlueprintOptions = req.options.parseBlueprintOptions || req._sails.config.blueprints.parseBlueprintOptions;
 
-  var Model = actionUtil.parseModel(req);
-  var pk = actionUtil.requirePk(req);
+  // Set the blueprint action for parseBlueprintOptions.
+  req.options.blueprintAction = 'findOne';
 
-  var query = Model.findOne(pk);
-  query = actionUtil.populateRequest(query, req);
+  var queryOptions = parseBlueprintOptions(req);
+
+  var Model = req._sails.models[queryOptions.using];
+
+  // Only use the `where`, `select` or `omit` from the criteria (nothing else is valid for findOne).
+  queryOptions.criteria = _.pick(queryOptions.criteria, ['where', 'select', 'omit']);
+
+  // Only use the primary key in the `where` clause.
+  queryOptions.criteria.where = _.pick(queryOptions.criteria.where, Model.primaryKey);
+
+
+  var query = Model.findOne(queryOptions.criteria);
+  Object.keys(queryOptions.populates).forEach(function(child) {
+    query.populate(child, queryOptions.populates[child]);
+  });
   query.exec(function found(err, matchingRecord) {
-    if (err) { return res.serverError(err); }
+    if (err) {
+      // If this is a usage error coming back from Waterline,
+      // (e.g. a bad criteria), then respond w/ a 400 status code.
+      // Otherwise, it's something unexpected, so use 500.
+      switch (err.name) {
+        case 'UsageError': return res.badRequest(formatUsageError(err, req));
+        default: return res.serverError(err);
+      }
+    }//-•
 
-    if(!matchingRecord) {
-      sails.log.verbose('No record found with the specified id (`'+pk+'`).');
+    if (!matchingRecord) {
+      req._sails.log.verbose('In `findOne` blueprint action: No record found with the specified id (`'+queryOptions.criteria.where[Model.primaryKey]+'`).');
       return res.notFound();
     }
 
-    if (sails.hooks['pubsub-offshore'] && req.isSocket) {
+    if (req._sails.hooks.pubsub && req.isSocket) {
       Model.subscribe(req, [matchingRecord[Model.primaryKey]]);
       actionUtil.subscribeDeep(req, matchingRecord);
     }
